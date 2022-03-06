@@ -1,6 +1,8 @@
 <script>
   import { time } from "../lib/stores.js";
   import { formatTime } from "../lib/utils.js";
+  import Canvas from "../lib/Canvas.svelte";
+  import Point from "../lib/Point.svelte";
 
   let geoLocation = false;
   let geoWatch = false;
@@ -21,6 +23,15 @@
   let longitude;
   let speed;
 
+  let wayPoints = [
+    { latitude: -37.783406, longitude: 144.996296 },
+    { latitude: -37.783571, longitude: 144.996078 },
+    { latitude: -37.783571, longitude: 144.996296 },
+    { latitude: -37.783406, longitude: 144.996078 }
+  ];
+  const canvasHeight = 400;
+  const canvasWidth = 200;
+
   function clicked() {
     geoLocation = !geoLocation;
     if (geoLocation) {
@@ -37,6 +48,29 @@
     }
   }
 
+  function calculateRatio() {
+    // TODO: only needs to be calculated when a new point outside of bounds is added
+    const maxLng = Math.max(...wayPoints.map((wayPoint) => wayPoint.longitude));
+    const minLng = Math.min(...wayPoints.map((wayPoint) => wayPoint.longitude));
+    const wRatio = canvasWidth / Math.max(Math.abs(maxLng - minLng), 0.00005);
+    const maxLat = Math.max(...wayPoints.map((wayPoint) => wayPoint.latitude));
+    const minLat = Math.min(...wayPoints.map((wayPoint) => wayPoint.latitude));
+    const hRatio = canvasHeight / Math.max(Math.abs(maxLat - minLat), 0.00005);
+    return Math.min(wRatio, hRatio);
+  }
+
+  function xForWayPoint(wayPoint) {
+    const ratio = calculateRatio();
+    const minLng = Math.min(...wayPoints.map((wayPoint) => wayPoint.longitude));
+    return (wayPoint.longitude - minLng) * ratio - canvasWidth / 2;
+  }
+
+  function yForWayPoint(wayPoint) {
+    const ratio = calculateRatio();
+    const maxLat = Math.max(...wayPoints.map((wayPoint) => wayPoint.latitude));
+    return (maxLat - wayPoint.latitude) * ratio - canvasHeight / 2;
+  }
+
   function setCurrentPosition(position) {
     terminate();
     lastLapse = lapse;
@@ -48,6 +82,16 @@
     latitude = position.coords.latitude;
     longitude = position.coords.longitude;
     speed = position.coords.speed;
+
+    console.log(wayPoints);
+    wayPoints = [
+      ...wayPoints,
+      {
+        latitude: latitude,
+        longitude: longitude
+      }
+    ];
+    console.log(wayPoints);
 
     unsubscribe = time.subscribe((value) => {
       lapse = value + previous;
@@ -76,6 +120,9 @@
     if (!geoWatch) {
       if ("geolocation" in navigator && "watchPosition" in navigator.geolocation) {
         message = "start geo watch";
+        unsubscribe = time.subscribe((value) => {
+          lapse = value + previous;
+        });
         geoWatch = navigator.geolocation.watchPosition(setCurrentPosition, positionError, {
           enableHighAccuracy: false,
           timeout: 15000,
@@ -145,3 +192,9 @@
   <dt>speed</dt>
   <dd>{speed}</dd>
 </dl>
+
+<Canvas height={canvasHeight} width={canvasWidth}>
+  {#each wayPoints as wayPoint}
+    <Point x={xForWayPoint(wayPoint)} y={yForWayPoint(wayPoint)} />
+  {/each}
+</Canvas>
